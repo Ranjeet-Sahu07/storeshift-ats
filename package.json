@@ -1,0 +1,47 @@
+{
+  "name": "storeshift-careers",
+  "version": "1.0.0",
+  "private": true,
+  "description": "StoreShift Enterprise Internship Management System (ATS + IMS)",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "14.2.5",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "@supabase/supabase-js": "2.45.4",
+    "@supabase/ssr": "0.5.1",
+    "recharts": "2.12.7",
+    "lucide-react": "0.436.0",
+    "clsx": "2.1.1",
+    "tailwind-merge": "2.5.2",
+    "zod": "3.23.8",
+    "react-hook-form": "7.53.0",
+    "@hookform/resolvers": "3.9.0",
+    "qrcode": "1.5.4",
+    "jspdf": "2.5.2",
+    "date-fns": "3.6.0",
+    "nanoid": "5.0.7",
+    "@dnd-kit/core": "6.1.0",
+    "@dnd-kit/sortable": "8.0.0",
+    "@dnd-kit/utilities": "3.2.2",
+    "sonner": "1.5.0"
+  },
+  "devDependencies": {
+    "typescript": "5.5.4",
+    "@types/node": "20.14.15",
+    "@types/react": "18.3.4",
+    "@types/react-dom": "18.3.0",
+    "@types/qrcode": "1.5.5",
+    "tailwindcss": "3.4.10",
+    "postcss": "8.4.41",
+    "autoprefixer": "10.4.20",
+    "eslint": "8.57.0",
+    "eslint-config-next": "14.2.5"
+  }
+}
