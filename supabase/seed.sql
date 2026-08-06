@@ -41,3 +41,20 @@ insert into email_templates (name, subject, body_html, category) values
    '<p>Hi {{full_name}},</p><p>Your application status has changed to: {{status}}.</p>',
    'rejection')
 on conflict do nothing;
+
+insert into letter_templates (type, title, body_template, signatory_name, signatory_title) values
+  (
+    'offer_letter',
+    'Internship Offer Letter',
+    E'Dear {{full_name}},\n\nWe are pleased to offer you the position of {{role_title}} in the {{department}} department as part of the StoreShift Internship Program.\n\nYour internship will run for {{duration_months}} months, starting {{start_date}}.\n\nYour official StoreShift email will be {{official_email}}.\n\nWe look forward to having you on the team.',
+    'Ranjeet Kumar',
+    'Founder & CEO'
+  ),
+  (
+    'lor',
+    'Letter of Recommendation',
+    E'To Whom It May Concern,\n\nThis is to certify that {{full_name}} completed a {{duration_months}}-month internship as a {{role_title}} in the {{department}} department at StoreShift. Throughout the internship, they demonstrated strong technical skills, reliability, and a collaborative attitude. We recommend them for future opportunities without reservation.',
+    'Ranjeet Kumar',
+    'Founder & CEO'
+  )
+on conflict (type) do nothing;

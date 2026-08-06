@@ -27,7 +27,7 @@ export function Hero() {
             Build the future of <span className="text-brand-400">local commerce</span> with us.
           </h1>
           <p className="mt-5 max-w-lg text-lg text-ink-100/80">
-            Join StoreShift&apos;s internship program and work on real SaaS products,
+            Join StoreShift's internship program and work on real SaaS products,
             ship code that reaches merchants across India, and grow alongside
             engineers who care about craft.
           </p>

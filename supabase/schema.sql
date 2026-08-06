@@ -98,15 +98,21 @@ create table applications (
   branch text,
   graduation_year integer,
   cgpa numeric(4,2),
+  tenth_percentage numeric(5,2),
+  twelfth_percentage numeric(5,2),
+  graduation_percentage numeric(5,2),
 
   -- Skills
   skills text[] default '{}',
   preferred_role text,
 
-  -- Documents (Supabase Storage paths)
+  -- Documents — resume is taken as a link (Google Drive / Dropbox / etc.)
+  -- rather than a private-bucket file upload, so admins can open it with
+  -- one click without needing a signed URL. resume_path is kept for any
+  -- legacy uploads and is optional.
+  resume_url text,
   resume_path text,
   portfolio_url text,
-  photo_path text,
   github_url text,
   linkedin_url text,
 
@@ -413,6 +419,20 @@ create table email_log (
   created_at timestamptz not null default now()
 );
 
+-- ----------------------------------------------------------------------------
+-- LETTER TEMPLATES  (editable Offer Letter / LOR body text, admin-managed)
+-- ----------------------------------------------------------------------------
+create table letter_templates (
+  id uuid primary key default uuid_generate_v4(),
+  type text not null unique check (type in ('offer_letter', 'lor')),
+  title text not null,
+  body_template text not null,
+  signatory_name text not null default 'Ranjeet Kumar',
+  signatory_title text not null default 'Founder & CEO',
+  updated_at timestamptz not null default now(),
+  updated_by uuid references profiles(id)
+);
+
 -- ============================================================================
 -- ROW LEVEL SECURITY
 -- ============================================================================
@@ -435,6 +455,9 @@ alter table documents enable row level security;
 alter table admin_notes enable row level security;
 alter table audit_logs enable row level security;
 alter table role_permissions enable row level security;
+alter table email_templates enable row level security;
+alter table email_log enable row level security;
+alter table letter_templates enable row level security;
 
 -- Helper: is the current user staff (any role except intern/applicant)?
 create or replace function is_staff()
@@ -455,7 +478,7 @@ $$;
 create policy "profiles_self_or_staff" on profiles
   for select using (id = auth.uid() or is_staff());
 create policy "profiles_self_update" on profiles
-  for update using (id = auth.uid() or is_staff());
+  for update using (id = auth.uid() or current_role_name() in ('founder', 'super_admin'));
 
 -- Applications: public INSERT (via anon key, applying through a link),
 -- but only staff can SELECT / UPDATE.
@@ -540,6 +563,12 @@ create policy "audit_logs_insert" on audit_logs for insert with check (true);
 create policy "role_permissions_staff_read" on role_permissions for select using (is_staff());
 create policy "role_permissions_founder_write" on role_permissions for all using (current_role_name() in ('founder','super_admin'));
 
+create policy "email_templates_staff_all" on email_templates for all using (is_staff());
+create policy "email_log_staff_read" on email_log for select using (is_staff());
+create policy "email_log_insert" on email_log for insert with check (true);
+create policy "letter_templates_staff_read" on letter_templates for select using (is_staff());
+create policy "letter_templates_staff_write" on letter_templates for all using (is_staff());
+
 -- ============================================================================
 -- TRIGGERS
 -- ============================================================================
@@ -556,6 +585,8 @@ create trigger trg_applications_updated before update on applications
 create trigger trg_tasks_updated before update on tasks
   for each row execute function set_updated_at();
 create trigger trg_profiles_updated before update on profiles
+  for each row execute function set_updated_at();
+create trigger trg_letter_templates_updated before update on letter_templates
   for each row execute function set_updated_at();
 
 -- Auto-create a profile row when a new auth user signs up
@@ -589,3 +620,31 @@ values
   ('offer-letters', 'offer-letters', false),
   ('lor', 'lor', false)
 on conflict (id) do nothing;
+
+-- ============================================================================
+-- STORAGE RLS POLICIES
+--
+-- Creating a bucket does NOT grant any access to it — storage.objects has
+-- its own RLS, completely separate from the RLS on public tables above.
+-- Without policies here, every upload/read against these buckets is
+-- rejected ("new row violates row-level security policy" on upload, or a
+-- 404 on a file that a table row references but was never actually
+-- allowed to be written). This is what these policies fix.
+-- ============================================================================
+
+-- Staff can upload, update, and read files for every admin-generated
+-- document type (certificates, offer letters, letters of recommendation).
+create policy "staff_manage_generated_documents" on storage.objects
+  for all
+  to authenticated
+  using (bucket_id in ('certificates', 'offer-letters', 'lor') and is_staff())
+  with check (bucket_id in ('certificates', 'offer-letters', 'lor') and is_staff());
+
+-- The `certificates` bucket is public, but public buckets in Supabase
+-- only bypass RLS on the dedicated public-URL read endpoint — inserting
+-- still needs the policy above, and this adds an explicit public SELECT
+-- policy too so certificate PDFs are also fetchable by anonymous
+-- visitors through any other read path (e.g. server-side signed URLs).
+create policy "public_read_certificates" on storage.objects
+  for select
+  using (bucket_id = 'certificates');

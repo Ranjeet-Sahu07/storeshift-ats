@@ -17,14 +17,17 @@ export const applicationSchema = z.object({
   branch: z.string().min(1, 'Branch/Major is required'),
   graduation_year: z.coerce.number().min(2020).max(2032),
   cgpa: z.coerce.number().min(0).max(10).optional(),
+  tenth_percentage: z.coerce.number().min(0).max(100).optional(),
+  twelfth_percentage: z.coerce.number().min(0).max(100).optional(),
+  graduation_percentage: z.coerce.number().min(0).max(100).optional(),
 
   // Step 3 — Skills
   skills: z.array(z.string()).min(1, 'Add at least one skill'),
   preferred_role: z.string().min(1, 'Select a preferred role'),
 
-  // Step 4 — Documents
-  resume_file: z.any().optional(),
-  photo_file: z.any().optional(),
+  // Step 4 — Documents (resume is a link — Google Drive / Dropbox / etc. —
+  // not a file upload, so it's always one click to open, no signed URLs)
+  resume_url: z.string().url('Enter a valid resume link (e.g. Google Drive share link)'),
   portfolio_url: z.string().url('Enter a valid URL').or(z.literal('')).optional(),
   github_url: z.string().url('Enter a valid GitHub URL').or(z.literal('')).optional(),
   linkedin_url: z.string().url('Enter a valid LinkedIn URL').or(z.literal('')).optional(),
@@ -46,7 +49,7 @@ export const STEP_FIELDS: Record<number, (keyof ApplicationFormValues)[]> = {
   0: ['full_name', 'email', 'phone', 'city', 'state'],
   1: ['college', 'degree', 'branch', 'graduation_year'],
   2: ['skills', 'preferred_role'],
-  3: [],
+  3: ['resume_url'],
   4: ['why_storeshift', 'biggest_project', 'availability'],
   5: ['declaration_accepted'],
 };

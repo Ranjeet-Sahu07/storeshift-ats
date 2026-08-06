@@ -17,7 +17,7 @@ export function LifeAt() {
           <p className="mt-4 text-ink-600">
             Our interns sit alongside full-time engineers, join the same standups,
             and get their work reviewed with the same bar we hold ourselves to.
-            No fetch-coffee internships here — you&apos;ll be in pull requests from week one.
+            No fetch-coffee internships here — you'll be in pull requests from week one.
           </p>
           <div className="mt-8 grid grid-cols-2 gap-4">
             {VALUES.map((v) => (
@@ -33,7 +33,7 @@ export function LifeAt() {
           <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at 30% 30%, white 0, transparent 45%)' }} />
           <div className="relative flex h-full flex-col justify-end gap-3">
             <div className="glass !bg-white/10 !border-white/10 rounded-xl p-4 text-white">
-              <p className="text-sm font-medium">&quot;Build. Innovate. Grow.&quot;</p>
+              <p className="text-sm font-medium">"Build. Innovate. Grow."</p>
               <p className="mt-1 text-xs text-white/60">— StoreShift engineering wall</p>
             </div>
             <div className="flex gap-3">

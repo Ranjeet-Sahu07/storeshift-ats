@@ -8,6 +8,7 @@ import { KanbanBoard } from '@/components/tasks/kanban-board';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input, Label, Select, Textarea } from '@/components/ui/input';
+import { PageSkeleton } from '@/components/ui/page-skeleton';
 import type { Task, TaskStatus } from '@/types';
 
 export default function TasksPage() {
@@ -16,17 +17,17 @@ export default function TasksPage() {
   const [filterIntern, setFilterIntern] = useState('all');
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ internshipId: '', title: '', description: '', priority: 'medium', deadline: '' });
+  const [loading, setLoading] = useState(true);
 
   async function load() {
     const supabase = createClient();
-    const { data: internList } = await supabase
-      .from('internships')
-      .select('id, role_title, profiles!internships_intern_id_fkey(full_name)')
-      .eq('status', 'active');
-    setInternships(internList ?? []);
-
-    const { data: taskList } = await supabase.from('tasks').select('*').order('created_at', { ascending: false });
-    setTasks((taskList as Task[]) ?? []);
+    const [internRes, taskRes] = await Promise.all([
+      supabase.from('internships').select('id, role_title, profiles!internships_intern_id_fkey(full_name)').eq('status', 'active'),
+      supabase.from('tasks').select('*').order('created_at', { ascending: false }),
+    ]);
+    setInternships(internRes.data ?? []);
+    setTasks((taskRes.data as Task[]) ?? []);
+    setLoading(false);
   }
 
   useEffect(() => { load(); }, []);
@@ -111,7 +112,7 @@ export default function TasksPage() {
         </Select>
       </div>
 
-      <KanbanBoard tasks={filtered} onStatusChange={updateStatus} />
+      {loading ? <PageSkeleton rows={4} /> : <KanbanBoard tasks={filtered} onStatusChange={updateStatus} />}
     </div>
   );
 }

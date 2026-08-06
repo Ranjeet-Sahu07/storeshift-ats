@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, Label } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/progress';
 
 export default function InternSettingsPage() {
   const [profile, setProfile] = useState<any | null>(null);
@@ -37,7 +38,15 @@ export default function InternSettingsPage() {
     if (error) toast.error(error.message); else { toast.success('Password updated'); setPassword(''); }
   }
 
-  if (!profile) return null;
+  if (!profile) {
+    return (
+      <div className="max-w-lg space-y-6">
+        <Skeleton className="h-8 w-40" />
+        <Skeleton className="h-40 w-full" />
+        <Skeleton className="h-32 w-full" />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-lg space-y-6">
@@ -54,8 +63,12 @@ export default function InternSettingsPage() {
             <Input value={profile.full_name} disabled />
           </div>
           <div>
-            <Label>Official Email</Label>
-            <Input value={profile.official_email ?? profile.email} disabled />
+            <Label>Login Email</Label>
+            <Input value={profile.email} disabled />
+          </div>
+          <div>
+            <Label>Official StoreShift Email</Label>
+            <Input value={profile.official_email ?? 'Not yet assigned — ask HR/Admin'} disabled className={!profile.official_email ? 'italic text-ink-400' : ''} />
           </div>
           <div>
             <Label>Phone</Label>

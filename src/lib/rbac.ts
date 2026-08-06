@@ -9,7 +9,7 @@ import type { UserRole } from '@/types';
 export const PERMISSIONS: Record<UserRole, string[]> = {
   founder: ['*'],
   super_admin: ['*'],
-  hr_manager: ['applications.manage', 'interns.manage', 'offers.generate', 'reports.view', 'links.generate'],
+  hr_manager: ['applications.manage', 'interns.manage', 'offers.generate', 'reports.view', 'links.generate', 'attendance.mark'],
   recruiter: ['applications.review', 'links.generate', 'interviews.schedule'],
   mentor: ['tasks.assign', 'performance.review', 'attendance.mark', 'messages.send'],
   technical_interviewer: ['interviews.conduct', 'applications.view'],

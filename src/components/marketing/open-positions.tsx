@@ -4,10 +4,12 @@ import { Button } from '@/components/ui/button';
 
 export async function OpenPositions() {
   const supabase = createClient();
+  const nowIso = new Date().toISOString();
   const { data: links } = await supabase
     .from('application_links')
     .select('*')
     .eq('is_active', true)
+    .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
     .order('created_at', { ascending: false })
     .limit(6);
 

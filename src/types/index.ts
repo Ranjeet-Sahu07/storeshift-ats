@@ -69,11 +69,14 @@ export interface Application {
   branch: string | null;
   graduation_year: number | null;
   cgpa: number | null;
+  tenth_percentage: number | null;
+  twelfth_percentage: number | null;
+  graduation_percentage: number | null;
   skills: string[];
   preferred_role: string | null;
+  resume_url: string | null;
   resume_path: string | null;
   portfolio_url: string | null;
-  photo_path: string | null;
   github_url: string | null;
   linkedin_url: string | null;
   questionnaire: Record<string, string>;

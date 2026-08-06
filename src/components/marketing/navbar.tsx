@@ -2,8 +2,9 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
-import { Menu, X, ShoppingBag } from 'lucide-react';
+import { Menu, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Logo } from '@/components/ui/logo';
 
 const LINKS = [
   { href: '#positions', label: 'Open Positions' },
@@ -19,14 +20,9 @@ export function Navbar() {
   return (
     <header className="sticky top-0 z-50 border-b border-ink-50/80 bg-white/80 backdrop-blur-lg">
       <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        <Link href="/" className="flex items-center gap-2">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-ink-900 text-brand-400">
-            <ShoppingBag size={18} strokeWidth={2.5} />
-          </span>
-          <span className="font-display text-lg font-bold text-ink-900">
-            Store<span className="text-brand-500">Shift</span>
-            <span className="ml-1 text-xs font-medium text-ink-400">Careers</span>
-          </span>
+        <Link href="/" className="flex items-center gap-1.5">
+          <Logo height={34} />
+          <span className="hidden text-xs font-medium text-ink-400 sm:inline">Careers</span>
         </Link>
 
         <nav className="hidden items-center gap-7 md:flex">

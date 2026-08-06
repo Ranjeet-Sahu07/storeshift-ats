@@ -1,8 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Search, Filter, Download } from 'lucide-react';
+import Papa from 'papaparse';
+import { Search, Filter, Download, Upload } from 'lucide-react';
+import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input, Select } from '@/components/ui/input';
@@ -10,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/progress';
 import { formatDate } from '@/lib/utils';
+import { generateApplicationId } from '@/lib/ids';
 import { APPLICATION_STATUS_LABELS, type Application, type ApplicationStatus } from '@/types';
 
 const STATUS_TONE: Record<ApplicationStatus, 'brand' | 'amber' | 'coral' | 'default'> = {
@@ -23,17 +26,18 @@ export default function ApplicationsPage() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<string>('all');
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function load() {
+    const supabase = createClient();
+    const { data } = await supabase.from('applications').select('*').order('submitted_at', { ascending: false });
+    setApps((data as Application[]) ?? []);
+    setLoading(false);
+  }
 
   useEffect(() => {
-    const supabase = createClient();
-    supabase
-      .from('applications')
-      .select('*')
-      .order('submitted_at', { ascending: false })
-      .then(({ data }) => {
-        setApps((data as Application[]) ?? []);
-        setLoading(false);
-      });
+    load();
   }, []);
 
   const filtered = apps.filter((a) => {
@@ -60,6 +64,59 @@ export default function ApplicationsPage() {
     a.click();
   }
 
+  function triggerImport() {
+    fileInputRef.current?.click();
+  }
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+
+    Papa.parse(file, {
+      header: true,
+      skipEmptyLines: true,
+      complete: async (results) => {
+        const rows = results.data as Record<string, string>[];
+        const supabase = createClient();
+        let imported = 0;
+        let failed = 0;
+        let seq = apps.length + 1;
+
+        for (const row of rows) {
+          const fullName = row['Name'] || row['full_name'] || row['Full Name'];
+          const email = row['Email'] || row['email'];
+          if (!fullName || !email) { failed++; continue; }
+
+          const { error } = await supabase.from('applications').insert({
+            application_id: generateApplicationId(seq++),
+            full_name: fullName,
+            email,
+            phone: row['Phone'] || row['phone'] || 'N/A',
+            college: row['College'] || row['college'] || null,
+            preferred_role: row['Role'] || row['preferred_role'] || null,
+            skills: (row['Skills'] || row['skills'] || '').split(',').map((s) => s.trim()).filter(Boolean),
+            status: (row['Status'] || row['status'] || 'submitted').toLowerCase().replace(/\s+/g, '_') as ApplicationStatus,
+            city: row['City'] || row['city'] || null,
+            state: row['State'] || row['state'] || null,
+            declaration_accepted: true,
+          });
+
+          if (error) failed++; else imported++;
+        }
+
+        setImporting(false);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        toast.success(`Imported ${imported} application(s)${failed ? ` — ${failed} row(s) skipped (missing name/email or invalid data)` : ''}`);
+        load();
+      },
+      error: (err) => {
+        setImporting(false);
+        toast.error(`Couldn't read that file: ${err.message}`);
+      },
+    });
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -67,7 +124,13 @@ export default function ApplicationsPage() {
           <h1 className="font-display text-2xl font-bold text-ink-900">Applications</h1>
           <p className="text-sm text-ink-500">{filtered.length} of {apps.length} applications</p>
         </div>
-        <Button variant="outline" onClick={exportCsv}><Download size={16} /> Export CSV</Button>
+        <div className="flex gap-2">
+          <input ref={fileInputRef} type="file" accept=".csv" onChange={handleImportFile} className="hidden" />
+          <Button variant="outline" onClick={triggerImport} disabled={importing}>
+            <Upload size={16} /> {importing ? 'Importing…' : 'Import CSV'}
+          </Button>
+          <Button variant="outline" onClick={exportCsv}><Download size={16} /> Export CSV</Button>
+        </div>
       </div>
 
       <Card>

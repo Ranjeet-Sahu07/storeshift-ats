@@ -37,7 +37,7 @@ export default async function InternDashboardPage() {
     return (
       <div className="rounded-2xl border border-ink-50 bg-white p-10 text-center">
         <h1 className="font-display text-xl font-bold text-ink-900">Welcome, {profile?.full_name}</h1>
-        <p className="mt-2 text-sm text-ink-500">Your internship record hasn&apos;t been set up yet. Please check with your mentor or HR.</p>
+        <p className="mt-2 text-sm text-ink-500">Your internship record hasn't been set up yet. Please check with your mentor or HR.</p>
       </div>
     );
   }
@@ -46,7 +46,7 @@ export default async function InternDashboardPage() {
     <div className="space-y-6">
       <div>
         <h1 className="font-display text-2xl font-bold text-ink-900">Welcome back, {profile?.full_name.split(' ')[0]} 👋</h1>
-        <p className="text-sm text-ink-500">Keep going — you&apos;re making great progress on {internship.role_title}.</p>
+        <p className="text-sm text-ink-500">Keep going — you're making great progress on {internship.role_title}.</p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

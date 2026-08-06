@@ -21,18 +21,19 @@ export default async function AdminDashboardPage() {
       supabase.from('applications').select('*').order('submitted_at', { ascending: false }).limit(5),
     ]);
 
+  const STAGES = ['submitted', 'under_review', 'shortlisted', 'interview_scheduled', 'selected'] as const;
+  const stageResults = await Promise.all(
+    STAGES.map((status) => supabase.from('applications').select('*', { count: 'exact', head: true }).eq('status', status))
+  );
   const stageCounts: Record<string, number> = {};
-  for (const status of ['submitted', 'under_review', 'shortlisted', 'interview_scheduled', 'selected'] as const) {
-    const { count } = await supabase.from('applications').select('*', { count: 'exact', head: true }).eq('status', status);
-    stageCounts[status] = count ?? 0;
-  }
+  STAGES.forEach((status, i) => { stageCounts[status] = stageResults[i].count ?? 0; });
 
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-bold text-ink-900">Dashboard</h1>
-          <p className="text-sm text-ink-500">Here&apos;s what&apos;s happening with your hiring pipeline.</p>
+          <p className="text-sm text-ink-500">Here's what's happening with your hiring pipeline.</p>
         </div>
         <Link href="/admin/links">
           <Button><Plus size={16} /> Generate Application Link</Button>

@@ -3,6 +3,14 @@
  *
  * EMAIL_PROVIDER=console (default) — logs the email and writes it to the
  *   `email_log` table instead of sending it. Safe for local dev / demos.
+ * EMAIL_PROVIDER=smtp — sends through any SMTP server, including Gmail /
+ *   Google Workspace. Set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD
+ *   (and optionally SMTP_SECURE) — see .env.example. For Gmail, SMTP_USER
+ *   must be the full address (e.g. careers@storeshift.in) and
+ *   SMTP_PASSWORD must be a 16-character **App Password**, not the normal
+ *   account password — Gmail rejects plain-password SMTP auth entirely.
+ *   Generate one at https://myaccount.google.com/apppasswords (requires
+ *   2-Step Verification to be turned on for that account first).
  * EMAIL_PROVIDER=resend — sends through Resend (https://resend.com).
  *   Set RESEND_API_KEY and EMAIL_FROM in your environment.
  *
@@ -59,8 +67,48 @@ class ResendEmailProvider implements EmailProvider {
   }
 }
 
+class SmtpEmailProvider implements EmailProvider {
+  async send(input: SendEmailInput) {
+    const host = process.env.SMTP_HOST;
+    const user = process.env.SMTP_USER;
+    const pass = process.env.SMTP_PASSWORD;
+
+    if (!host || !user || !pass) {
+      return { id: '', status: 'failed' as const, error: 'SMTP_HOST, SMTP_USER, and SMTP_PASSWORD must all be set' };
+    }
+
+    try {
+      // Dynamic import so `nodemailer` (a server-only Node package) never
+      // gets pulled into any client bundle — this file is only ever
+      // imported from server code (API routes), but the dynamic import
+      // is a belt-and-suspenders guard against that changing by accident.
+      const nodemailer = (await import('nodemailer')).default;
+      const port = Number(process.env.SMTP_PORT ?? 587);
+      const transporter = nodemailer.createTransport({
+        host,
+        port,
+        secure: process.env.SMTP_SECURE === 'true' || port === 465,
+        auth: { user, pass },
+      });
+
+      const info = await transporter.sendMail({
+        from: process.env.EMAIL_FROM ?? user,
+        to: input.to,
+        subject: input.subject,
+        html: input.html,
+      });
+
+      return { id: info.messageId, status: 'sent' as const };
+    } catch (err: any) {
+      return { id: '', status: 'failed' as const, error: err.message };
+    }
+  }
+}
+
 function getProvider(): EmailProvider {
   switch (process.env.EMAIL_PROVIDER) {
+    case 'smtp':
+      return new SmtpEmailProvider();
     case 'resend':
       return new ResendEmailProvider();
     default:
