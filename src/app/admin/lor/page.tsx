@@ -9,7 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { generateLorId } from '@/lib/ids';
 import { generateLetterPdf } from '@/lib/pdf/letter-pdf';
-import { downloadDocument } from '@/lib/documents';
+import { downloadDocument, notifyDocumentReady } from '@/lib/documents';
+
 import { formatDate } from '@/lib/utils';
 import { PageSkeleton } from '@/components/ui/page-skeleton';
 
@@ -19,7 +20,7 @@ function renderTemplate(
 ) {
   return body.replace(
     /{{\s*(\w+)\s*}}/g,
-    (_, key) => String(vars[key] ?? '')
+                      (_, key) => String(vars[key] ?? '')
   );
 }
 
@@ -84,10 +85,11 @@ export default function LorPage() {
       const { error: uploadError } = await supabase.storage.from('lor').upload(path, pdfBlob, { upsert: true, contentType: 'application/pdf' });
       if (uploadError) throw uploadError;
 
-      const { error: insertError } = await supabase.from('letters_of_recommendation').insert({
+      const { data: lorRow, error: insertError } = await supabase.from('letters_of_recommendation').insert({
         lor_id: lorId, internship_id: internship.id, body: bodyLines.join('\n\n'), pdf_path: path, generated_by: user?.id,
-      });
+      }).select().single();
       if (insertError) throw insertError;
+      if (lorRow) await notifyDocumentReady('lor', internship.id, lorRow.id);
 
       toast.success(`LOR ${lorId} generated`);
       load();
@@ -116,6 +118,7 @@ export default function LorPage() {
       const { error: uploadError } = await supabase.storage.from('lor').upload(path, pdfBlob, { upsert: true, contentType: 'application/pdf' });
       if (uploadError) throw uploadError;
       if (!lor.pdf_path) await supabase.from('letters_of_recommendation').update({ pdf_path: path }).eq('id', lor.id);
+      await notifyDocumentReady('lor', lor.internship_id, lor.id);
       toast.success('Letter file regenerated');
     } catch (err: any) {
       toast.error(err.message ?? 'Regeneration failed');

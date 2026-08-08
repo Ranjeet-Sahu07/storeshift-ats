@@ -48,6 +48,7 @@ export interface ApplicationLink {
   max_applications: number | null;
   is_active: boolean;
   expires_at: string | null;
+  required_fields: string[];
   created_at: string;
   application_count?: number;
 }

@@ -9,7 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Input, Label } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { generateLinkCode } from '@/lib/ids';
-import { formatDate } from '@/lib/utils';
+import { OPTIONAL_FIELD_REGISTRY } from '@/lib/validation/application';
+import { formatDate, cn } from '@/lib/utils';
 import type { ApplicationLink } from '@/types';
 
 export default function LinksPage() {
@@ -20,6 +21,7 @@ export default function LinksPage() {
   const [roleTitle, setRoleTitle] = useState('');
   const [department, setDepartment] = useState('');
   const [prefix, setPrefix] = useState('FE');
+  const [requiredFields, setRequiredFields] = useState<Set<string>>(new Set());
 
   async function load() {
     const supabase = createClient();
@@ -34,6 +36,14 @@ export default function LinksPage() {
 
   useEffect(() => { load(); }, []);
 
+  function toggleRequired(key: string) {
+    setRequiredFields((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  }
+
   async function createLink() {
     if (!label || !roleTitle) { toast.error('Label and role title are required'); return; }
     const supabase = createClient();
@@ -41,10 +51,11 @@ export default function LinksPage() {
     const code = generateLinkCode(prefix || 'GEN');
     const { error } = await supabase.from('application_links').insert({
       code, label, role_title: roleTitle, department: department || null, created_by: user?.id,
+      required_fields: [...requiredFields],
     });
     if (error) { toast.error(error.message); return; }
     toast.success('Application link generated');
-    setLabel(''); setRoleTitle(''); setDepartment(''); setShowForm(false);
+    setLabel(''); setRoleTitle(''); setDepartment(''); setRequiredFields(new Set()); setShowForm(false);
     load();
   }
 
@@ -73,26 +84,47 @@ export default function LinksPage() {
       {showForm && (
         <Card>
           <CardHeader><CardTitle>New Application Link</CardTitle></CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
+          <CardContent className="space-y-5">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <Label>Internal Label</Label>
+                <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Frontend Intern - LinkedIn Post" />
+              </div>
+              <div>
+                <Label>Role Title</Label>
+                <Input value={roleTitle} onChange={(e) => setRoleTitle(e.target.value)} placeholder="Frontend Developer Intern" />
+              </div>
+              <div>
+                <Label>Department</Label>
+                <Input value={department} onChange={(e) => setDepartment(e.target.value)} placeholder="Engineering" />
+              </div>
+              <div>
+                <Label>Code Prefix</Label>
+                <Input value={prefix} onChange={(e) => setPrefix(e.target.value.toUpperCase().slice(0, 4))} placeholder="FE" />
+              </div>
+            </div>
+
             <div>
-              <Label>Internal Label</Label>
-              <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Frontend Intern - LinkedIn Post" />
+              <Label>Which optional fields should be required on this form?</Label>
+              <p className="mb-2 text-xs text-ink-400">Everything else (name, email, resume link, etc.) is always required. Tick anything extra you need for this role.</p>
+              <div className="flex flex-wrap gap-2">
+                {OPTIONAL_FIELD_REGISTRY.map((f) => (
+                  <button
+                    key={f.key}
+                    type="button"
+                    onClick={() => toggleRequired(f.key)}
+                    className={cn(
+                      'rounded-full border px-3 py-1.5 text-xs font-medium transition-colors',
+                      requiredFields.has(f.key) ? 'border-brand-600 bg-brand-600 text-white' : 'border-ink-100 bg-white text-ink-600 hover:border-brand-300'
+                    )}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div>
-              <Label>Role Title</Label>
-              <Input value={roleTitle} onChange={(e) => setRoleTitle(e.target.value)} placeholder="Frontend Developer Intern" />
-            </div>
-            <div>
-              <Label>Department</Label>
-              <Input value={department} onChange={(e) => setDepartment(e.target.value)} placeholder="Engineering" />
-            </div>
-            <div>
-              <Label>Code Prefix</Label>
-              <Input value={prefix} onChange={(e) => setPrefix(e.target.value.toUpperCase().slice(0, 4))} placeholder="FE" />
-            </div>
-            <div className="sm:col-span-2">
-              <Button onClick={createLink}>Generate Link</Button>
-            </div>
+
+            <Button onClick={createLink}>Generate Link</Button>
           </CardContent>
         </Card>
       )}
@@ -105,6 +137,7 @@ export default function LinksPage() {
                 <th className="px-5 py-3 font-medium">Label</th>
                 <th className="px-5 py-3 font-medium">Code</th>
                 <th className="px-5 py-3 font-medium">Role</th>
+                <th className="px-5 py-3 font-medium">Required Extras</th>
                 <th className="px-5 py-3 font-medium">Applications</th>
                 <th className="px-5 py-3 font-medium">Created</th>
                 <th className="px-5 py-3 font-medium">Status</th>
@@ -117,6 +150,13 @@ export default function LinksPage() {
                   <td className="px-5 py-3 font-medium text-ink-900">{l.label}</td>
                   <td className="px-5 py-3 font-mono text-xs text-ink-500">{l.code}</td>
                   <td className="px-5 py-3 text-ink-600">{l.role_title}</td>
+                  <td className="px-5 py-3 text-xs text-ink-500">
+                    {l.required_fields?.length
+                      ? l.required_fields
+                          .map((k: string) => OPTIONAL_FIELD_REGISTRY.find((f) => f.key === k)?.label ?? k)
+                          .join(', ')
+                      : <span className="text-ink-300">Defaults only</span>}
+                  </td>
                   <td className="px-5 py-3">
                     <Badge tone="brand">{counts[l.id] ?? 0}</Badge>
                   </td>
@@ -133,7 +173,7 @@ export default function LinksPage() {
                 </tr>
               ))}
               {links.length === 0 && (
-                <tr><td colSpan={7} className="px-5 py-10 text-center text-ink-400">
+                <tr><td colSpan={8} className="px-5 py-10 text-center text-ink-400">
                   <Link2 className="mx-auto mb-2 text-ink-200" size={28} />
                   No application links yet — generate your first one above.
                 </td></tr>

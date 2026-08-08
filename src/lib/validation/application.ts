@@ -55,3 +55,22 @@ export const STEP_FIELDS: Record<number, (keyof ApplicationFormValues)[]> = {
 };
 
 export const STEP_TITLES = ['Personal Information', 'Education', 'Skills', 'Documents', 'Questionnaire', 'Declaration'];
+
+/**
+ * Fields that are optional by default but can be marked mandatory for a
+ * specific application link (Admin → Application Links). `step` says
+ * which step of the form they live on, so the form can validate them at
+ * the right point instead of only at final submit.
+ */
+export const OPTIONAL_FIELD_REGISTRY: { key: string; label: string; step: number }[] = [
+  { key: 'date_of_birth', label: 'Date of Birth', step: 0 },
+  { key: 'gender', label: 'Gender', step: 0 },
+  { key: 'address', label: 'Address', step: 0 },
+  { key: 'cgpa', label: 'CGPA', step: 1 },
+  { key: 'tenth_percentage', label: '10th %', step: 1 },
+  { key: 'twelfth_percentage', label: '12th %', step: 1 },
+  { key: 'graduation_percentage', label: 'Graduation %', step: 1 },
+  { key: 'portfolio_url', label: 'Portfolio URL', step: 3 },
+  { key: 'github_url', label: 'GitHub URL', step: 3 },
+  { key: 'linkedin_url', label: 'LinkedIn URL', step: 3 },
+];

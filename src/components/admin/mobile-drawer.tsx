@@ -13,7 +13,13 @@ export function MobileNavDrawer({ role }: { role: UserRole }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const isAdmin = pathname?.startsWith('/admin');
-  const items = isAdmin ? ADMIN_NAV.filter((item) => !item.perm || can(role, item.perm)) : INTERN_NAV;
+  
+  const items = isAdmin
+  ? ADMIN_NAV.filter((item) => !item.perm || can(role, item.perm))
+  : INTERN_NAV.map((item) => ({
+    ...item,
+    perm: null,
+  }));
 
   return (
     <>

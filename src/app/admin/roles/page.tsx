@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ShieldCheck, UserPlus, AlertCircle, Lock } from 'lucide-react';
+import { ShieldCheck, UserPlus, AlertCircle, Lock, Copy, CheckCircle2 } from 'lucide-react';
 import { PageSkeleton } from '@/components/ui/page-skeleton';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase/client';
@@ -28,6 +28,7 @@ export default function RolesPage() {
   const [newStaff, setNewStaff] = useState({ fullName: '', email: '', password: '', role: 'hr_manager', department: '' });
   const [creating, setCreating] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [staffCreated, setStaffCreated] = useState<{ email: string; password: string; emailStatus?: string } | null>(null);
   const [savingUserId, setSavingUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -80,8 +81,7 @@ export default function RolesPage() {
       });
       const data = await res.json();
       if (!res.ok) { setErrorMsg(data.error); return; }
-      toast.success(`Staff account created — ${data.email}`);
-      setShowAddForm(false);
+      setStaffCreated({ email: newStaff.email, password: newStaff.password, emailStatus: data.emailStatus });
       setNewStaff({ fullName: '', email: '', password: '', role: 'hr_manager', department: '' });
       load();
     } catch (err: any) {
@@ -115,6 +115,8 @@ export default function RolesPage() {
   }
 
   const roles = Object.keys(ROLE_LABELS).filter((r) => r !== 'applicant') as UserRole[];
+  const staffUsers = users.filter((u) => u.role !== 'intern');
+  const internUsers = users.filter((u) => u.role === 'intern');
 
   return (
     <div className="space-y-6">
@@ -124,7 +126,7 @@ export default function RolesPage() {
           <p className="text-sm text-ink-500">Fine-grained, role-based access control across the platform.</p>
         </div>
         {isSuperAdmin && (
-          <Button onClick={() => setShowAddForm((s) => !s)}><UserPlus size={16} /> Add Team Member</Button>
+          <Button onClick={() => { setShowAddForm((s) => !s); setStaffCreated(null); setErrorMsg(null); }}><UserPlus size={16} /> Add Team Member</Button>
         )}
       </div>
 
@@ -138,38 +140,68 @@ export default function RolesPage() {
       {showAddForm && (
         <Card>
           <CardHeader><CardTitle>Create Staff Login</CardTitle></CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2">
+          <CardContent className="space-y-4">
             {errorMsg && (
-              <div className="flex items-start gap-2 rounded-xl border border-coral-500/30 bg-coral-500/5 p-3 text-sm text-coral-600 sm:col-span-2">
+              <div className="flex items-start gap-2 rounded-xl border border-coral-500/30 bg-coral-500/5 p-3 text-sm text-coral-600">
                 <AlertCircle size={16} className="mt-0.5 shrink-0" /> <span>{errorMsg}</span>
               </div>
             )}
-            <div>
-              <Label>Full Name</Label>
-              <Input value={newStaff.fullName} onChange={(e) => setNewStaff({ ...newStaff, fullName: e.target.value })} />
-            </div>
-            <div>
-              <Label>Email (this becomes their login)</Label>
-              <Input type="email" value={newStaff.email} onChange={(e) => setNewStaff({ ...newStaff, email: e.target.value })} placeholder="name@storeshift.in" />
-            </div>
-            <div>
-              <Label>Temporary Password</Label>
-              <Input type="text" value={newStaff.password} onChange={(e) => setNewStaff({ ...newStaff, password: e.target.value })} placeholder="Min. 8 characters" />
-            </div>
-            <div>
-              <Label>Role</Label>
-              <Select value={newStaff.role} onChange={(e) => setNewStaff({ ...newStaff, role: e.target.value })}>
-                {roles.filter((r) => r !== 'founder').map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
-              </Select>
-            </div>
-            <div>
-              <Label>Department (optional)</Label>
-              <Input value={newStaff.department} onChange={(e) => setNewStaff({ ...newStaff, department: e.target.value })} />
-            </div>
-            <div className="flex gap-2 sm:col-span-2">
-              <Button onClick={createStaffAccount} disabled={creating}>{creating ? 'Creating…' : 'Create Account'}</Button>
-              <Button variant="ghost" onClick={() => setShowAddForm(false)}>Cancel</Button>
-            </div>
+
+            {staffCreated ? (
+              <div className="space-y-4 rounded-xl border border-brand-200 bg-brand-50 p-4">
+                <div className="flex items-center gap-2 text-brand-700"><CheckCircle2 size={18} /> <p className="font-semibold">Staff account created</p></div>
+                <div className="space-y-2 rounded-lg bg-white p-3 text-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-ink-400">Login Email</span>
+                    <span className="flex items-center gap-2 font-mono font-medium text-ink-900">
+                      {staffCreated.email}
+                      <button onClick={() => { navigator.clipboard.writeText(staffCreated.email); toast.success('Copied'); }} className="text-ink-400 hover:text-brand-600"><Copy size={13} /></button>
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2 border-t border-ink-50 pt-2">
+                    <span className="text-ink-400">Password</span>
+                    <span className="flex items-center gap-2 font-mono font-medium text-ink-900">
+                      {staffCreated.password}
+                      <button onClick={() => { navigator.clipboard.writeText(staffCreated.password); toast.success('Copied'); }} className="text-ink-400 hover:text-brand-600"><Copy size={13} /></button>
+                    </span>
+                  </div>
+                </div>
+                <p className="text-xs text-ink-500">
+                  This is shown once — a welcome email with these credentials was also sent
+                  {staffCreated.emailStatus && staffCreated.emailStatus !== 'sent' ? " (though delivery may have failed — check Settings → Email Delivery)" : ''}.
+                </p>
+                <Button size="sm" variant="outline" onClick={() => { setStaffCreated(null); setShowAddForm(false); }}>Done</Button>
+              </div>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <Label>Full Name</Label>
+                  <Input value={newStaff.fullName} onChange={(e) => setNewStaff({ ...newStaff, fullName: e.target.value })} />
+                </div>
+                <div>
+                  <Label>Email (this becomes their login)</Label>
+                  <Input type="email" value={newStaff.email} onChange={(e) => setNewStaff({ ...newStaff, email: e.target.value })} placeholder="name@storeshift.in" />
+                </div>
+                <div>
+                  <Label>Temporary Password</Label>
+                  <Input type="text" value={newStaff.password} onChange={(e) => setNewStaff({ ...newStaff, password: e.target.value })} placeholder="Min. 8 characters" />
+                </div>
+                <div>
+                  <Label>Role</Label>
+                  <Select value={newStaff.role} onChange={(e) => setNewStaff({ ...newStaff, role: e.target.value })}>
+                    {roles.filter((r) => r !== 'founder').map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                  </Select>
+                </div>
+                <div>
+                  <Label>Department (optional)</Label>
+                  <Input value={newStaff.department} onChange={(e) => setNewStaff({ ...newStaff, department: e.target.value })} />
+                </div>
+                <div className="flex gap-2 sm:col-span-2">
+                  <Button onClick={createStaffAccount} disabled={creating}>{creating ? 'Creating…' : 'Create Account'}</Button>
+                  <Button variant="ghost" onClick={() => setShowAddForm(false)}>Cancel</Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -215,64 +247,103 @@ export default function RolesPage() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>All Users</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Staff Accounts ({staffUsers.length})</CardTitle></CardHeader>
         <CardContent className="overflow-x-auto p-0">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-ink-50 bg-mist/60 text-xs uppercase text-ink-400">
-              <tr>
-                <th className="px-5 py-3 font-medium">Name</th>
-                <th className="px-5 py-3 font-medium">Email</th>
-                <th className="px-5 py-3 font-medium">Role</th>
-                <th className="px-5 py-3 font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => {
-                const isFounder = u.role === 'founder';
-                const isSelf = u.id === currentUserId;
-                const canEditThisRow = isSuperAdmin && !isFounder;
-                return (
-                  <tr key={u.id} className="border-b border-ink-50 last:border-0 hover:bg-mist/40">
-                    <td className="px-5 py-3 font-medium text-ink-900">
-                      {u.full_name} {isSelf && <span className="text-xs font-normal text-ink-400">(you)</span>}
-                    </td>
-                    <td className="px-5 py-3 text-ink-500">{u.official_email ?? u.email}</td>
-                    <td className="px-5 py-3">
-                      {canEditThisRow ? (
-                        <Select
-                          value={u.role}
-                          onChange={(e) => changeUserRole(u.id, e.target.value as UserRole)}
-                          disabled={savingUserId === u.id}
-                          className="!h-8 !w-44 !text-xs"
-                        >
-                          {roles.filter((r) => r !== 'founder').map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
-                        </Select>
-                      ) : (
-                        <Badge tone="ink"><ShieldCheck size={11} className="mr-1" />{ROLE_LABELS[u.role as UserRole]}</Badge>
-                      )}
-                    </td>
-                    <td className="px-5 py-3">
-                      {canEditThisRow && !isSelf ? (
-                        <button
-                          onClick={() => toggleActive(u.id, u.is_active)}
-                          disabled={savingUserId === u.id}
-                          className="cursor-pointer"
-                        >
-                          <Badge tone={u.is_active ? 'brand' : 'coral'}>{u.is_active ? 'Active' : 'Disabled'}</Badge>
-                        </button>
-                      ) : (
-                        <Badge tone={u.is_active ? 'brand' : 'coral'}>{u.is_active ? 'Active' : 'Disabled'}</Badge>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <UserTable
+            users={staffUsers}
+            currentUserId={currentUserId}
+            isSuperAdmin={isSuperAdmin}
+            savingUserId={savingUserId}
+            roles={roles}
+            changeUserRole={changeUserRole}
+            toggleActive={toggleActive}
+          />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Intern Accounts ({internUsers.length})</CardTitle></CardHeader>
+        <CardContent className="overflow-x-auto p-0">
+          {internUsers.length === 0 ? (
+            <p className="px-5 py-8 text-center text-sm text-ink-400">No intern accounts yet — create one from Intern Management.</p>
+          ) : (
+            <UserTable
+              users={internUsers}
+              currentUserId={currentUserId}
+              isSuperAdmin={isSuperAdmin}
+              savingUserId={savingUserId}
+              roles={roles}
+              changeUserRole={changeUserRole}
+              toggleActive={toggleActive}
+            />
+          )}
         </CardContent>
       </Card>
         </>
       )}
     </div>
+  );
+}
+
+function UserTable({
+  users, currentUserId, isSuperAdmin, savingUserId, roles, changeUserRole, toggleActive,
+}: {
+  users: any[];
+  currentUserId: string | null;
+  isSuperAdmin: boolean;
+  savingUserId: string | null;
+  roles: UserRole[];
+  changeUserRole: (userId: string, role: UserRole) => void;
+  toggleActive: (userId: string, isActive: boolean) => void;
+}) {
+  return (
+    <table className="w-full text-left text-sm">
+      <thead className="border-b border-ink-50 bg-mist/60 text-xs uppercase text-ink-400">
+        <tr>
+          <th className="px-5 py-3 font-medium">Name</th>
+          <th className="px-5 py-3 font-medium">Email</th>
+          <th className="px-5 py-3 font-medium">Role</th>
+          <th className="px-5 py-3 font-medium">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {users.map((u) => {
+          const isFounder = u.role === 'founder';
+          const isSelf = u.id === currentUserId;
+          const canEditThisRow = isSuperAdmin && !isFounder;
+          return (
+            <tr key={u.id} className="border-b border-ink-50 last:border-0 hover:bg-mist/40">
+              <td className="px-5 py-3 font-medium text-ink-900">
+                {u.full_name} {isSelf && <span className="text-xs font-normal text-ink-400">(you)</span>}
+              </td>
+              <td className="px-5 py-3 text-ink-500">{u.official_email ?? u.email}</td>
+              <td className="px-5 py-3">
+                {canEditThisRow ? (
+                  <Select
+                    value={u.role}
+                    onChange={(e) => changeUserRole(u.id, e.target.value as UserRole)}
+                    disabled={savingUserId === u.id}
+                    className="!h-8 !w-44 !text-xs"
+                  >
+                    {roles.filter((r) => r !== 'founder').map((r) => <option key={r} value={r}>{ROLE_LABELS[r]}</option>)}
+                  </Select>
+                ) : (
+                  <Badge tone="ink"><ShieldCheck size={11} className="mr-1" />{ROLE_LABELS[u.role as UserRole]}</Badge>
+                )}
+              </td>
+              <td className="px-5 py-3">
+                {canEditThisRow && !isSelf ? (
+                  <button onClick={() => toggleActive(u.id, u.is_active)} disabled={savingUserId === u.id} className="cursor-pointer">
+                    <Badge tone={u.is_active ? 'brand' : 'coral'}>{u.is_active ? 'Active' : 'Disabled'}</Badge>
+                  </button>
+                ) : (
+                  <Badge tone={u.is_active ? 'brand' : 'coral'}>{u.is_active ? 'Active' : 'Disabled'}</Badge>
+                )}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
   );
 }

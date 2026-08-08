@@ -9,7 +9,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { generateOfferId } from '@/lib/ids';
 import { generateLetterPdf } from '@/lib/pdf/letter-pdf';
-import { downloadDocument } from '@/lib/documents';
+import { downloadDocument, notifyDocumentReady } from '@/lib/documents';
+
 import { formatDate } from '@/lib/utils';
 import { PageSkeleton } from '@/components/ui/page-skeleton';
 
@@ -85,8 +86,9 @@ export default function OfferLettersPage() {
       const { error: uploadError } = await supabase.storage.from('offer-letters').upload(path, pdfBlob, { upsert: true, contentType: 'application/pdf' });
       if (uploadError) throw uploadError;
 
-      const { error: insertError } = await supabase.from('offer_letters').insert({ offer_id: offerId, internship_id: internship.id, pdf_path: path, generated_by: user?.id });
+      const { data: offerRow, error: insertError } = await supabase.from('offer_letters').insert({ offer_id: offerId, internship_id: internship.id, pdf_path: path, generated_by: user?.id }).select().single();
       if (insertError) throw insertError;
+      if (offerRow) await notifyDocumentReady('offer_letter', internship.id, offerRow.id);
 
       toast.success(`Offer letter ${offerId} generated`);
       load();
@@ -116,6 +118,7 @@ export default function OfferLettersPage() {
       const { error: uploadError } = await supabase.storage.from('offer-letters').upload(path, pdfBlob, { upsert: true, contentType: 'application/pdf' });
       if (uploadError) throw uploadError;
       if (!offer.pdf_path) await supabase.from('offer_letters').update({ pdf_path: path }).eq('id', offer.id);
+      await notifyDocumentReady('offer_letter', offer.internship_id, offer.id);
       toast.success('Offer letter file regenerated');
     } catch (err: any) {
       toast.error(err.message ?? 'Regeneration failed');

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient, createClient } from '@/lib/supabase/server';
-import { sendEmail, renderTemplate } from '@/lib/email/service';
+import { sendEmail, renderStoredTemplate } from '@/lib/email/service';
+import { brandedEmailShell, eyebrow, heading, emailButton, credentialTable } from '@/lib/email/templates';
 
 /**
  * Admin-only: creates an official StoreShift intern account.
@@ -13,22 +14,20 @@ import { sendEmail, renderTemplate } from '@/lib/email/service';
  *     with StoreShift before this system existed.
  *
  * IMPORTANT — login identity: the auth account (and therefore login) uses
- * the applicant's PERSONAL email, not a generated "official" one. This
- * avoids the whole class of bugs around inventing a unique
- * name.role26@storeshift.in address at creation time. The official
- * StoreShift-branded email is a separate, optional, purely-informational
- * field (`profiles.official_email`) that admins can set or change anytime
- * via PATCH /api/interns/official-email — it never blocks account
- * creation and never has to be unique against auth.
+ * the applicant's PERSONAL email, not a generated "official" one.
  *
- * IMPORTANT — profile row: we no longer rely on the `handle_new_user`
- * database trigger alone to create the `profiles` row. We `upsert` it
- * explicitly right here, so even if the trigger is slow, missing, or
- * silently failed, the profile row is guaranteed to exist and be
- * correct before we reference it from `internships`. This is the fix for
- * "account create hota hai auth me par profile table me nahi" — a plain
- * `.update()` on a nonexistent row succeeds with zero rows affected and
- * no error, which is exactly how that bug went unnoticed.
+ * IMPORTANT — email delivery: for BOTH credential modes, the actual email
+ * is sent through our own configured provider (SMTP/Resend/console — see
+ * src/lib/email/service.ts), never through Supabase's own mailer. For
+ * `invite_email` mode this means using `admin.auth.admin.generateLink()`
+ * (which creates the invite token but sends nothing) rather than
+ * `inviteUserByEmail()` (which both creates the token AND dispatches an
+ * email from Supabase's own service) — we only want the former, then we
+ * deliver the resulting link ourselves in our own branded template.
+ *
+ * IMPORTANT — profile row: we `upsert` it explicitly rather than relying
+ * on the `handle_new_user` trigger alone, so the row is guaranteed to
+ * exist before `internships` references it.
  *
  * Body: { applicationId?, fullName?, personalEmail?, department, roleTitle,
  *         mentorId, durationMonths, accessLevel, skills, officialEmail?,
@@ -54,8 +53,8 @@ export async function POST(req: NextRequest) {
   } = body;
 
   const admin = createAdminClient();
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://careers.storeshift.in';
 
-  // Resolve identity: from an application, or from manual entry.
   let fullName: string;
   let loginEmail: string;
 
@@ -73,7 +72,6 @@ export async function POST(req: NextRequest) {
   }
   loginEmail = loginEmail.trim().toLowerCase();
 
-  // Pre-check for a clearer error than the raw Supabase one.
   const { data: existingProfile } = await admin
     .from('profiles')
     .select('id')
@@ -89,21 +87,23 @@ export async function POST(req: NextRequest) {
 
   let newUserId: string;
   let tempPassword: string | null = null;
+  let magicLinkUrl: string | null = null;
   let inviteSent = false;
 
   if (credentialMode === 'invite_email') {
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://careers.storeshift.in';
-    const { data: invited, error: inviteError } = await admin.auth.admin.inviteUserByEmail(loginEmail, {
-      data: { full_name: fullName, role: 'intern' },
-      redirectTo: `${siteUrl}/login`,
+    const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+      type: 'invite',
+      email: loginEmail,
+      options: { data: { full_name: fullName, role: 'intern' }, redirectTo: `${siteUrl}/set-password` },
     });
-    if (inviteError || !invited?.user) {
-      const message = inviteError?.message?.toLowerCase().includes('already been registered')
+    if (linkError || !linkData?.user) {
+      const message = linkError?.message?.toLowerCase().includes('already been registered')
         ? `"${loginEmail}" is already registered.`
-        : inviteError?.message ?? 'Failed to send invite';
+        : linkError?.message ?? 'Failed to create invite link';
       return NextResponse.json({ error: message, code: 'EMAIL_TAKEN' }, { status: 409 });
     }
-    newUserId = invited.user.id;
+    newUserId = linkData.user.id;
+    magicLinkUrl = linkData.properties?.action_link ?? `${siteUrl}/login`;
     inviteSent = true;
   } else {
     tempPassword = `SS-${Math.random().toString(36).slice(2, 10)}!A1`;
@@ -122,8 +122,6 @@ export async function POST(req: NextRequest) {
     newUserId = newUser.user.id;
   }
 
-  // Explicit upsert — see the big comment at the top of this file for why
-  // this can't just be an `.update()`.
   const { error: profileError } = await admin.from('profiles').upsert(
     {
       id: newUserId,
@@ -183,19 +181,35 @@ export async function POST(req: NextRequest) {
     metadata: { login_email: loginEmail, official_email: officialEmail ?? null, credentialMode, manual: !applicationId },
   });
 
-  let emailStatus: string = 'skipped';
-  if (credentialMode === 'temp_password') {
-    const result = await sendEmail({
-      to: loginEmail,
+  // Congratulations email — always through our own provider (never
+  // Supabase's mailer), with wording pulled from the admin-editable
+  // template (Settings → Email Templates) so this isn't hardcoded copy.
+  const templateKey = credentialMode === 'invite_email' ? 'intern_welcome_invite' : 'intern_welcome_temp_password';
+  const { subject, bodyHtml } = await renderStoredTemplate(
+    admin,
+    templateKey,
+    { full_name: fullName, role_title: roleTitle },
+    {
       subject: 'Welcome to StoreShift 🎉',
-      html: renderTemplate(
-        '<p>Hi {{full_name}},</p><p>Congratulations — you have been added as a {{role_title}} intern at StoreShift.</p><p>Your login:</p><p>Email: <strong>{{login_email}}</strong><br/>Temporary Password: <strong>{{password}}</strong></p><p>Please log in and change your password on first access.</p>',
-        { full_name: fullName, role_title: roleTitle, login_email: loginEmail, password: tempPassword ?? '' }
-      ),
-      relatedApplicationId: applicationId || undefined,
-    });
-    emailStatus = result.status;
-  }
+      bodyHtml: `<p>You've officially joined the team as a <strong>{{role_title}}</strong> intern. We're excited to have you on board.</p>`,
+    }
+  );
+
+  const credentialsBlock = tempPassword
+    ? credentialTable([['Login Email', loginEmail], ['Temporary Password', tempPassword]]) +
+      `<p style="color:#5A6B6A;font-size:13px;">Please log in and change your password on first access.</p>` +
+      emailButton('Log In to Your Dashboard', `${siteUrl}/login`)
+    : `<p style="color:#5A6B6A;font-size:14px;line-height:1.6;">Your login email is <strong style="color:#0D2B2A;">${loginEmail}</strong>.</p>` +
+      emailButton('Set Your Password', magicLinkUrl ?? `${siteUrl}/login`);
+
+  const html = brandedEmailShell(`${eyebrow('Congratulations 🎉')}${heading(`Welcome to StoreShift, ${fullName}!`)}${bodyHtml}${credentialsBlock}`);
+  const emailResult = await sendEmail({ to: loginEmail, subject, html, relatedApplicationId: applicationId || undefined });
+
+  await admin.from('email_log').insert({
+    to_email: loginEmail, subject, status: emailResult.status,
+    sent_by: user.id, related_application_id: applicationId || null,
+    provider_response: { kind: 'welcome', credentialMode, providerId: emailResult.id, error: (emailResult as any).error ?? null },
+  });
 
   return NextResponse.json({
     internship,
@@ -204,6 +218,6 @@ export async function POST(req: NextRequest) {
     credentialMode,
     tempPassword,
     inviteSent,
-    emailStatus,
+    emailStatus: emailResult.status,
   });
 }

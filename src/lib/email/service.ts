@@ -126,6 +126,26 @@ export async function sendEmail(input: SendEmailInput) {
   return provider.send(input);
 }
 
+/**
+ * Fetches an admin-editable template row by its stable `key` and renders
+ * its subject + body with the given tokens. Falls back to the provided
+ * defaults if the row is missing (e.g. a fresh database that hasn't run
+ * the seed yet) so email sending never hard-fails on a missing template.
+ * `admin` must be a service-role client (this is always called from
+ * server-side code that already has one).
+ */
+export async function renderStoredTemplate(
+  admin: any,
+  key: string,
+  vars: Record<string, string | number | undefined>,
+  fallback: { subject: string; bodyHtml: string }
+): Promise<{ subject: string; bodyHtml: string }> {
+  const { data } = await admin.from('email_templates').select('subject, body_html').eq('key', key).maybeSingle();
+  const subject = renderTemplate(data?.subject ?? fallback.subject, vars);
+  const bodyHtml = renderTemplate(data?.body_html ?? fallback.bodyHtml, vars);
+  return { subject, bodyHtml };
+}
+
 /** Fire off a batch of emails sequentially, collecting results (bulk-send feature). */
 export async function sendBulkEmails(inputs: SendEmailInput[]) {
   const results = [];

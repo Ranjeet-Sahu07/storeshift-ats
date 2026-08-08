@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { generateCertificateId } from '@/lib/ids';
 import { generateCertificatePdf } from '@/lib/pdf/certificate-pdf';
 import { PageSkeleton } from '@/components/ui/page-skeleton';
-import { downloadDocument } from '@/lib/documents';
+import { downloadDocument, notifyDocumentReady } from '@/lib/documents';
 import { formatDate } from '@/lib/utils';
 
 export default function CertificatesPage() {
@@ -58,7 +58,7 @@ export default function CertificatesPage() {
       if (!internship) continue;
 
       const certificateId = generateCertificateId(seq++);
-      const verificationUrl = `${process.env.NEXT_PUBLIC_MAIN_SITE_URL ?? 'https://storeshift.in'}/certificate/verify?id=${certificateId}`;
+      const verificationUrl = `${process.env.NEXT_PUBLIC_SITE_URL ?? 'https://careers.storeshift.in'}/certificate/verify?id=${certificateId}`;
       const durationText = `${new Date(internship.start_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} – ${new Date(internship.end_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} (${internship.duration_months} months)`;
 
       try {
@@ -77,7 +77,7 @@ export default function CertificatesPage() {
         const { error: uploadError } = await supabase.storage.from('certificates').upload(path, pdfBlob, { upsert: true, contentType: 'application/pdf' });
         if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
 
-        const { error: insertError } = await supabase.from('certificates').insert({
+        const { data: certRow, error: insertError } = await supabase.from('certificates').insert({
           certificate_id: certificateId,
           internship_id: internship.id,
           intern_name: internship.profiles?.full_name ?? 'Intern',
@@ -89,9 +89,10 @@ export default function CertificatesPage() {
           pdf_path: path,
           qr_verification_url: verificationUrl,
           generated_by: user?.id,
-        });
+        }).select().single();
         if (insertError) throw new Error(insertError.message);
 
+        if (certRow) await notifyDocumentReady('certificate', internship.id, certRow.id);
         succeeded++;
       } catch (err: any) {
         toast.error(`Failed for ${internship.profiles?.full_name}: ${err.message}`);
@@ -122,6 +123,7 @@ export default function CertificatesPage() {
       const { error: uploadError } = await supabase.storage.from('certificates').upload(path, pdfBlob, { upsert: true, contentType: 'application/pdf' });
       if (uploadError) throw uploadError;
       if (!cert.pdf_path) await supabase.from('certificates').update({ pdf_path: path }).eq('id', cert.id);
+      await notifyDocumentReady('certificate', cert.internship_id, cert.id);
       toast.success('Certificate file regenerated');
     } catch (err: any) {
       toast.error(err.message ?? 'Regeneration failed');

@@ -5,19 +5,14 @@ import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { can } from '@/lib/rbac';
 import { Logo } from '@/components/ui/logo';
-import { ADMIN_NAV } from '@/lib/nav';
+import { ADMIN_NAV, INTERN_NAV } from '@/lib/nav';
 import type { UserRole } from '@/types';
 
 export function NavLinks({
   items,
   onNavigate,
 }: {
-  items: Array<{
-    href: string;
-    label: string;
-    icon: typeof ADMIN_NAV[number]['icon'];
-    perm?: string | null;
-  }>;
+  items: typeof ADMIN_NAV | typeof INTERN_NAV;
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();

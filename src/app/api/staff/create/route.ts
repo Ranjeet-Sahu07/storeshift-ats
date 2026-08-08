@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient, createClient } from '@/lib/supabase/server';
+import { sendEmail, renderStoredTemplate } from '@/lib/email/service';
+import { brandedEmailShell, eyebrow, heading, credentialTable, emailButton } from '@/lib/email/templates';
+import { ROLE_LABELS, type UserRole } from '@/types';
 
 /**
  * Admin-only: creates a staff login (HR Manager, Recruiter, Mentor,
@@ -76,5 +79,23 @@ export async function POST(req: NextRequest) {
     metadata: { role, email: normalizedEmail },
   });
 
-  return NextResponse.json({ userId: newUser.user.id, email: normalizedEmail });
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? 'https://careers.storeshift.in';
+  const roleLabel = ROLE_LABELS[role as UserRole] ?? role;
+  const { subject, bodyHtml } = await renderStoredTemplate(
+    admin,
+    'staff_welcome',
+    { full_name: fullName, role_label: roleLabel },
+    { subject: 'Welcome to the StoreShift team 🎉', bodyHtml: '<p>An account has been created for you on the StoreShift admin panel as a <strong>{{role_label}}</strong>.</p>' }
+  );
+  const html = brandedEmailShell(
+    `${eyebrow('Welcome to the Team')}${heading(`Hi ${fullName},`)}${bodyHtml}${credentialTable([['Login Email', normalizedEmail], ['Temporary Password', password]])}<p style="color:#5A6B6A;font-size:13px;">Please log in and change your password on first access.</p>${emailButton('Log In', `${siteUrl}/login`)}`
+  );
+  const emailResult = await sendEmail({ to: normalizedEmail, subject, html });
+
+  await admin.from('email_log').insert({
+    to_email: normalizedEmail, subject, status: emailResult.status, sent_by: user.id,
+    provider_response: { kind: 'staff_welcome', providerId: emailResult.id, error: (emailResult as any).error ?? null },
+  });
+
+  return NextResponse.json({ userId: newUser.user.id, email: normalizedEmail, emailStatus: emailResult.status });
 }

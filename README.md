@@ -494,3 +494,125 @@ src/
 - Run migrations **004 and 005** if you already have this project
   deployed — 004 especially, since it's what actually unblocks document
   generation.
+
+## 12. Changelog — round 8 (certificate layout fix + email notifications everywhere)
+
+- **Certificate template overlap bugs fixed** — the logo was overlapping
+  the "StoreShift" wordmark (insufficient spacing math), "OF INTERNSHIP"
+  showed garbled `'V` characters (jsPDF's built-in fonts don't render the
+  ❖ unicode glyph — replaced with small drawn diamond shapes instead),
+  and the Duration/Project/Skills/Role row was sitting at almost the same
+  height as the Certificate ID / QR code block, causing the "Role" value
+  to visually collide with the QR box. The whole bottom half of the
+  layout was recalculated into two clearly separated vertical bands (the
+  detail row, then — well below it — signature/laurel/cert-ID/QR
+  together), with logo+wordmark width measured and centered as one
+  group instead of hand-placed offsets. Long values (like a full date
+  range) now truncate based on actual measured text width instead of a
+  fixed, too-short character count.
+- **Premium touch added**: a very faint (3.5% opacity) logo watermark
+  now sits behind the certificate body — the kind of detail official
+  printed certificates use — visible enough to feel intentional, subtle
+  enough to never interfere with the text over it.
+- **Congratulations email, properly branded, never through Supabase** —
+  new `welcomeEmailHtml()` template (dark header, logo, card layout,
+  matching the login page's visual language) is sent through *your own*
+  configured provider (SMTP/`careers@storeshift.in` in your case) for
+  every new intern account. The "invite email" credential option
+  previously used `admin.auth.admin.inviteUserByEmail()`, which sends an
+  email from *Supabase's own mail service*, not yours — switched to
+  `admin.auth.admin.generateLink()`, which creates the same secure
+  invite link without sending anything, so we can deliver it ourselves.
+- **Document-ready emails** — generating *or regenerating* an offer
+  letter, certificate, or LOR now automatically emails the intern
+  (`documentReadyEmailHtml()`). Certificates (public bucket) link
+  directly to the PDF; offer letters/LORs (private buckets) point to the
+  dashboard login, since a signed URL would expire before the email is
+  likely to be opened.
+- **"Message this intern" — with history — added directly to Intern
+  Management.** Click **Message** on any intern's row to open a panel
+  with a subject/body composer (sent via `customMessageEmailHtml()`)
+  and, below it, every email ever sent to that address — pulled straight
+  from `email_log`, most recent first, each with its delivery status.
+- All three of the above share one underlying template system
+  (`src/lib/email/templates.ts`) and are logged to `email_log`
+  consistently, so "Message" history shows welcome emails, document
+  notifications, and manual messages side by side.
+- Note for local development: the branded emails embed the logo as
+  `${NEXT_PUBLIC_SITE_URL}/logo-mark.png` — that only resolves for real
+  email clients once it's a publicly reachable URL (i.e. once deployed),
+  not `localhost`. Nothing to fix here, just expected — check
+  Settings → Email Delivery → Send Test Email against a real deployment
+  to see the logo render.
+
+## 13. Changelog — round 9 (ID race conditions, invite flow, per-link required fields, speed)
+
+- **`duplicate key value violates unique constraint "applications_application_id_key"` — fixed at the root.**
+  Application IDs (and certificate/offer/LOR IDs) were generated
+  client-side as "count existing rows, add one" — this races under
+  concurrent submissions, and breaks permanently after any row is ever
+  deleted (the count goes down, but previously-issued numbers don't).
+  Replaced with real Postgres sequences + `BEFORE INSERT` triggers for
+  all four ID types, so generation is atomic at the database level and
+  can't collide, no matter how many people submit at once.
+- **Duplicate applications now update instead of erroring or duplicating.**
+  If the same email applies again through the same link, the form now
+  looks up their existing application first and updates it (a genuine
+  correction) instead of inserting a second row. A matching unique
+  index (`email, link_id`) enforces this at the database level too, so
+  it holds even if a future code path forgets to check first.
+- **Per-link required fields** — Admin → Application Links now has a
+  checklist (10th/12th/Graduation %, CGPA, DOB, address, portfolio,
+  GitHub, LinkedIn) for marking which normally-optional fields are
+  mandatory for a specific role's application. The form enforces these
+  live (red asterisk + inline error), and the Links table shows what's
+  required per link.
+- **QR code domain fixed** — certificates now verify against
+  `careers.storeshift.in` (where `/certificate/verify` actually lives),
+  not `storeshift.in`.
+- **The intern invite-link bug — root cause found and fixed.** Clicking
+  the invite email's link was landing on a bare `/login` page with no
+  logic to handle Supabase's callback, so the token effectively went
+  nowhere useful and, if reused or delayed, showed `otp_expired`. Built
+  a real `/set-password` page: it parses the callback (handles both the
+  success case with tokens and the error/expired case explicitly),
+  establishes the session, and lets the intern actually set a password
+  before landing on their dashboard. The invite flow now points here
+  instead of `/login`.
+- **Password reset now emails the intern too** (previously only shown
+  to admin one-time in-app) — both happen; email delivery isn't
+  guaranteed to be configured, so the in-app one-time view stays as the
+  reliable fallback either way.
+- **Staff creation (Role Management → Add Team Member) now sends a
+  welcome email** with a one-time password-view confirmation panel,
+  matching the intern creation flow exactly.
+- **Every system email is now admin-editable**, not just the offer
+  letter/LOR templates from last round. `email_templates` gained a
+  stable `key` column (`intern_welcome_temp_password`,
+  `intern_welcome_invite`, `document_ready`, `password_reset`,
+  `staff_welcome`) so renaming the display name in Settings never
+  breaks the code that looks a template up — only the actual message
+  body is editable, the branded header/footer chrome stays code-defined.
+- **Role Management's "All Users" list split into "Staff Accounts" and
+  "Intern Accounts"** sections — the single flat mixed list was hard to
+  scan (as your screenshot showed). This is a UI-level separation on
+  top of the existing single `profiles` table; a full physical table
+  split remains something I'd want to scope as its own careful change
+  given how many foreign keys reference `profiles.id` — not attempted
+  here, same reasoning as before.
+- **Navigation speed** — middleware and the admin/dashboard layouts were
+  each independently calling `getUser()` (a network round-trip to
+  Supabase's Auth server, every single time) — up to 4 sequential
+  network calls before a protected page even started rendering. Switched
+  to `getSession()` (verified locally from the cookie, no network call)
+  for the fast pre-checks, and removed a duplicate role-check that ran
+  in both middleware and the layout. Real security is unaffected — every
+  table's RLS policy is still the actual enforcement boundary regardless
+  of what middleware decides.
+- **Branded loading states added** (`loading.tsx` for `/admin`,
+  `/dashboard`, and the root) — Next.js shows these automatically during
+  navigation, so page changes now show a StoreShift-styled spinner
+  instead of a blank white flash while the next page loads.
+- Run **migration 006** — it covers the ID sequences, the duplicate-
+  application unique indexes, the `required_fields` column, and the new
+  email template keys, all in one file.

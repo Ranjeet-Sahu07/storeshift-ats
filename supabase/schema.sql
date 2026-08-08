@@ -69,6 +69,9 @@ create table application_links (
   max_applications integer, -- null = unlimited
   is_active boolean not null default true,
   expires_at timestamptz,
+  -- Optional fields the admin has marked mandatory for THIS link, e.g.
+  -- {portfolio_url,github_url,cgpa}. Anything not listed stays optional.
+  required_fields text[] default '{}',
   created_at timestamptz not null default now()
 );
 
@@ -134,6 +137,12 @@ create table applications (
 create index idx_applications_status on applications(status);
 create index idx_applications_link on applications(link_id);
 create index idx_applications_email on applications(email);
+
+-- The same email applying again through the same link is treated as a
+-- correction to their existing application, not a new one — enforced
+-- here so it holds even if a future code path forgets to check first.
+create unique index uq_applications_email_link on applications (email, link_id) where link_id is not null;
+create unique index uq_applications_email_no_link on applications (email) where link_id is null;
 
 -- ----------------------------------------------------------------------------
 -- APPLICATION TIMELINE  (every state change / note, for the activity trail)
@@ -399,10 +408,11 @@ create index idx_audit_logs_actor on audit_logs(actor_id);
 -- ----------------------------------------------------------------------------
 create table email_templates (
   id uuid primary key default uuid_generate_v4(),
+  key text unique, -- stable machine lookup, e.g. 'intern_welcome_temp_password' — never shown to admins, safe to keep even if they rename `name`
   name text not null,
   subject text not null,
   body_html text not null,
-  category text, -- 'application', 'interview', 'offer', 'rejection', 'certificate'
+  category text, -- 'application', 'interview', 'offer', 'rejection', 'certificate', 'onboarding', 'documents'
   created_by uuid references profiles(id),
   created_at timestamptz not null default now()
 );
@@ -588,6 +598,64 @@ create trigger trg_profiles_updated before update on profiles
   for each row execute function set_updated_at();
 create trigger trg_letter_templates_updated before update on letter_templates
   for each row execute function set_updated_at();
+
+-- ----------------------------------------------------------------------------
+-- ID GENERATION  (atomic sequences, not client-side "count rows, add one" —
+-- the latter races under concurrent submissions and after any row is ever
+-- deleted, which is what caused duplicate-key errors on applications)
+-- ----------------------------------------------------------------------------
+create sequence application_id_seq;
+create sequence certificate_id_seq;
+create sequence offer_id_seq;
+create sequence lor_id_seq;
+
+create or replace function set_application_id()
+returns trigger language plpgsql as $$
+begin
+  if new.application_id is null or new.application_id = '' then
+    new.application_id := 'SS-APP-' || extract(year from now())::int || '-' || lpad(nextval('application_id_seq')::text, 6, '0');
+  end if;
+  return new;
+end;
+$$;
+create trigger trg_set_application_id before insert on applications
+  for each row execute function set_application_id();
+
+create or replace function set_certificate_id()
+returns trigger language plpgsql as $$
+begin
+  if new.certificate_id is null or new.certificate_id = '' then
+    new.certificate_id := 'SS-INT-' || extract(year from now())::int || '-' || lpad(nextval('certificate_id_seq')::text, 4, '0');
+  end if;
+  return new;
+end;
+$$;
+create trigger trg_set_certificate_id before insert on certificates
+  for each row execute function set_certificate_id();
+
+create or replace function set_offer_id()
+returns trigger language plpgsql as $$
+begin
+  if new.offer_id is null or new.offer_id = '' then
+    new.offer_id := 'SS-OFR-' || extract(year from now())::int || '-' || lpad(nextval('offer_id_seq')::text, 4, '0');
+  end if;
+  return new;
+end;
+$$;
+create trigger trg_set_offer_id before insert on offer_letters
+  for each row execute function set_offer_id();
+
+create or replace function set_lor_id()
+returns trigger language plpgsql as $$
+begin
+  if new.lor_id is null or new.lor_id = '' then
+    new.lor_id := 'SS-LOR-' || extract(year from now())::int || '-' || lpad(nextval('lor_id_seq')::text, 4, '0');
+  end if;
+  return new;
+end;
+$$;
+create trigger trg_set_lor_id before insert on letters_of_recommendation
+  for each row execute function set_lor_id();
 
 -- Auto-create a profile row when a new auth user signs up
 create or replace function handle_new_user()

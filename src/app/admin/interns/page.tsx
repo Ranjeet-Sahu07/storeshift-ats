@@ -15,6 +15,7 @@ import { Avatar } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/progress';
 import { generateOfficialEmail } from '@/lib/ids';
 import { downloadDocument } from '@/lib/documents';
+import { EmailInternModal } from '@/components/admin/email-intern-modal';
 import { cn } from '@/lib/utils';
 
 type CredentialMode = 'temp_password' | 'invite_email';
@@ -48,6 +49,7 @@ export default function InternsPage() {
   const [orphaned, setOrphaned] = useState<any[] | null>(null);
   const [repairingId, setRepairingId] = useState<string | null>(null);
   const [docStatus, setDocStatus] = useState<Record<string, { offer?: string; cert?: string; lor?: string }>>({});
+  const [messagingIntern, setMessagingIntern] = useState<{ id: string; full_name: string; email: string } | null>(null);
 
   async function load() {
     setLoading(true);
@@ -393,6 +395,7 @@ export default function InternsPage() {
                     <th className="px-5 py-3 font-medium">Duration</th>
                     <th className="px-5 py-3 font-medium">Status</th>
                     <th className="px-5 py-3 font-medium">Documents</th>
+                    <th className="px-5 py-3 font-medium">Message</th>
                     <th className="px-5 py-3 font-medium">Credentials</th>
                   </tr>
                 </thead>
@@ -427,6 +430,15 @@ export default function InternsPage() {
                         </div>
                       </td>
                       <td className="px-5 py-3">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setMessagingIntern({ id: i.profiles?.id, full_name: i.profiles?.full_name, email: i.profiles?.email })}
+                        >
+                          <Mail size={12} /> Message
+                        </Button>
+                      </td>
+                      <td className="px-5 py-3">
                         {resetResult && resetResult.userId === i.profiles?.id ? (
                           <span className="flex items-center gap-1.5 font-mono text-xs text-brand-700">
                             {resetResult.password}
@@ -451,6 +463,10 @@ export default function InternsPage() {
             </CardContent>
           </Card>
         </>
+      )}
+
+      {messagingIntern && (
+        <EmailInternModal recipient={messagingIntern} onClose={() => setMessagingIntern(null)} />
       )}
     </div>
   );
